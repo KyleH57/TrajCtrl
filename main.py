@@ -9,7 +9,6 @@ def calculate_motion_segments(target_distance, max_vel, max_accel):
     :param max_vel:
     :param max_accel:
     :return: time_to_max_vel, accel_distance, time_at_max_vel
-
     """
     time_to_max_vel = max_vel / max_accel
     accel_distance = 0.5 * max_accel * time_to_max_vel ** 2
