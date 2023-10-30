@@ -36,34 +36,32 @@ def calculate_wheel_velocities(D, omega, L, V_max):
 
     return V_FL, V_FR, V_RL, V_RR
 
-
 def calculate_total_time(target_distance, max_vel, max_accel):
     time_to_max_vel, _, time_at_max_vel = calculate_motion_segments(target_distance, max_vel, max_accel)
     total_time = 2 * time_to_max_vel + time_at_max_vel
     return total_time
 
-
 def calculate_motion_segments(target_distance, max_vel, max_accel):
     """
     Calculates the time to accelerate to max velocity, the distance traveled during acceleration, and the time spent
-    Supports both positive and negative distances.
+    I don't think this supports negative distances
     :param target_distance:
     :param max_vel:
     :param max_accel:
-    :return: time_to_max_vel, accel_distance, time_at_max_vel
+    :return:
     """
     time_to_max_vel = max_vel / max_accel
     accel_distance = 0.5 * max_accel * time_to_max_vel ** 2
 
-    if abs(target_distance) <= 2 * accel_distance:
+    if target_distance <= 2 * accel_distance:
         time_at_max_vel = 0
     else:
-        time_at_max_vel = (abs(target_distance) - 2 * accel_distance) / max_vel
+        time_at_max_vel = (target_distance - 2 * accel_distance) / max_vel
 
     return time_to_max_vel, accel_distance, time_at_max_vel
 
 
-def plot_combined(D, V, max_time, max_accel):
+def plot_combined(D, max_time, max_accel):
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 6))
 
     ax1.set_title('Wheel Trajectories')
@@ -72,20 +70,12 @@ def plot_combined(D, V, max_time, max_accel):
     ax1.axhline(0, color='black', linewidth=0.8)  # x-axis
 
     for i, wheel in enumerate(['FL', 'FR', 'RL', 'RR']):
-        adjusted_velocity = V[i]  # Using the actual maximum velocity for each wheel
-        time_to_max_vel, accel_distance, time_at_max_vel = calculate_motion_segments(D[i], adjusted_velocity,
+        adjusted_velocity = abs(D[i]) / max_time
+        time_to_max_vel, accel_distance, time_at_max_vel = calculate_motion_segments(abs(D[i]), adjusted_velocity,
                                                                                      max_accel)
         t = np.linspace(0, max_time, 1000)
 
-        # Velocity calculation
-        vel = np.where(t <= time_to_max_vel,
-                       max_accel * t * np.sign(D[i]),
-                       np.where(t <= time_to_max_vel + time_at_max_vel,
-                                adjusted_velocity * np.sign(D[i]),
-                                adjusted_velocity * np.sign(D[i]) - max_accel * (
-                                            t - time_to_max_vel - time_at_max_vel) * np.sign(D[i])))
-
-        # Position calculation
+        # Revised position calculation
         pos = np.where(
             t <= time_to_max_vel,
             0.5 * max_accel * t ** 2 * np.sign(D[i]),  # Acceleration phase
@@ -99,6 +89,14 @@ def plot_combined(D, V, max_time, max_accel):
                 # Deceleration phase
             )
         )
+
+        # Velocity calculation
+        vel = np.where(t <= time_to_max_vel,
+                       max_accel * t * np.sign(D[i]),
+                       np.where(t <= time_to_max_vel + time_at_max_vel,
+                                adjusted_velocity * np.sign(D[i]),
+                                adjusted_velocity * np.sign(D[i]) - max_accel * (
+                                            t - time_to_max_vel - time_at_max_vel) * np.sign(D[i])))
 
         ax1.plot(t, pos, label=f'{wheel} Position')
         ax1.plot(t, vel, '--', label=f'{wheel} Velocity')
@@ -114,11 +112,9 @@ def plot_combined(D, V, max_time, max_accel):
     plt.show()
 
 
-print(calculate_motion_segments(-8, 1, 1))
-
 # Define parameters
 P_start = [0, 0]
-P_end = [0, -8]
+P_end = [0, 8]
 theta_degrees = 0
 theta = theta_degrees * np.pi / 180
 L = 1.0
@@ -131,17 +127,21 @@ D = calculate_displacement(P_start, P_end, theta, L)
 # Calculate and Normalize Wheel Velocities
 V = calculate_wheel_velocities([P_end[0] - P_start[0], P_end[1] - P_start[1]], theta, L, V_max)
 
+# Calculate the time each wheel takes to complete its movement
+times = [calculate_total_time(abs(d), V_max, max_accel) for d in D]
+
 # Find the maximum time required for any wheel to complete its movement
-max_time = max([calculate_total_time(d, V[i], max_accel) for i, d in enumerate(D)])
+max_time = max(times)
 
 # Plot combined trajectories of all wheels and the bar graph of displacements
-plot_combined(D, V, max_time, max_accel)
+plot_combined(D, max_time, max_accel)
+
+
 
 # Revised adjusted velocity and acceleration distance calculation
 for i, wheel in enumerate(['FL', 'FR', 'BL', 'BR']):
     adjusted_velocity = V[i]  # Using the actual maximum velocity for each wheel
-    time_to_max_vel, accel_distance, time_at_max_vel = calculate_motion_segments(D[i], adjusted_velocity,
-                                                                                 max_accel)
+    time_to_max_vel, accel_distance, time_at_max_vel = calculate_motion_segments(abs(D[i]), adjusted_velocity, max_accel)
 
     # Debugging for each wheel
     # Generating time array for plotting
@@ -152,20 +152,16 @@ for i, wheel in enumerate(['FL', 'FR', 'BL', 'BR']):
                    max_accel * t * np.sign(D[i]),
                    np.where(t <= time_to_max_vel + time_at_max_vel,
                             adjusted_velocity * np.sign(D[i]),
-                            adjusted_velocity * np.sign(D[i]) - max_accel * (
-                                        t - time_to_max_vel - time_at_max_vel) * np.sign(D[i])))
+                            adjusted_velocity * np.sign(D[i]) - max_accel * (t - time_to_max_vel - time_at_max_vel) * np.sign(D[i])))
 
     # Position calculation
     pos = np.where(
         t <= time_to_max_vel,
-        0.5 * max_accel * t ** 2 * np.sign(D[i]),  # Acceleration phase
+        0.5 * max_accel * t**2 * np.sign(D[i]),  # Acceleration phase
         np.where(
             t <= time_to_max_vel + time_at_max_vel,
-            accel_distance * np.sign(D[i]) + adjusted_velocity * (t - time_to_max_vel) * np.sign(D[i]),
-            # Constant velocity phase
-            accel_distance * np.sign(D[i]) + adjusted_velocity * time_at_max_vel * np.sign(D[i]) + adjusted_velocity * (
-                        t - time_to_max_vel - time_at_max_vel) * np.sign(D[i]) - 0.5 * max_accel * (
-                        t - time_to_max_vel - time_at_max_vel) ** 2 * np.sign(D[i])  # Deceleration phase
+            accel_distance * np.sign(D[i]) + adjusted_velocity * (t - time_to_max_vel) * np.sign(D[i]),  # Constant velocity phase
+            accel_distance * np.sign(D[i]) + adjusted_velocity * time_at_max_vel * np.sign(D[i]) + adjusted_velocity * (t - time_to_max_vel - time_at_max_vel) * np.sign(D[i]) - 0.5 * max_accel * (t - time_to_max_vel - time_at_max_vel)**2 * np.sign(D[i])  # Deceleration phase
         )
     )
 
