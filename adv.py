@@ -109,14 +109,85 @@ def plot_combined(D, V, max_time, max_accel):
     plt.tight_layout()
     plt.show()
 
+def calculate_trajectories(D, V, max_time, max_accel):
+    trajectories = {}
+    for i, wheel in enumerate(['FL', 'FR', 'RL', 'RR']):
+        adjusted_velocity = V[i]
+        time_to_max_vel, accel_distance, time_at_max_vel = calculate_motion_segments(D[i], adjusted_velocity, max_accel)
+        t = np.linspace(0, max_time, 1000)
+
+        # Velocity calculation
+        vel = np.where(t <= time_to_max_vel,
+                       max_accel * t * np.sign(D[i]),
+                       np.where(t <= time_to_max_vel + time_at_max_vel,
+                                adjusted_velocity,
+                                adjusted_velocity - max_accel * (t - time_to_max_vel - time_at_max_vel) * np.sign(D[i])))
+
+        # Position calculation
+        pos = np.where(
+            t <= time_to_max_vel,
+            0.5 * max_accel * t ** 2 * np.sign(D[i]),
+            np.where(
+                t <= time_to_max_vel + time_at_max_vel,
+                accel_distance * np.sign(D[i]) + adjusted_velocity * (t - time_to_max_vel),
+                accel_distance * np.sign(D[i]) + adjusted_velocity * time_at_max_vel + adjusted_velocity * (t - time_to_max_vel - time_at_max_vel) - 0.5 * max_accel * (t - time_to_max_vel - time_at_max_vel) ** 2 * np.sign(D[i])
+            )
+        )
+
+        trajectories[wheel] = {'time': t, 'position': pos, 'velocity': vel}
+
+    return trajectories
+
+
+def plot_trajectories(D, trajectories):
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 6))
+
+    ax1.set_title('Wheel Trajectories')
+    ax1.set_xlabel('Time (s)')
+    ax1.set_ylabel('Position & Velocity')
+    ax1.axhline(0, color='black', linewidth=0.8)
+
+    for wheel in ['FL', 'FR', 'RL', 'RR']:
+        t = trajectories[wheel]['time']
+        pos = trajectories[wheel]['position']
+        vel = trajectories[wheel]['velocity']
+        ax1.plot(t, pos, label=f'{wheel} Position')
+        ax1.plot(t, vel, '--', label=f'{wheel} Velocity')
+
+    ax1.legend()
+
+    ax2.set_title('Wheel Displacements')
+    ax2.bar(['FL', 'FR', 'RL', 'RR'], D, color='grey', alpha=0.7)
+    ax2.set_ylabel('Displacement')
+
+    plt.tight_layout()
+    plt.show()
+
+def calculate_max_time(D, V, max_accel):
+    max_times = []
+
+    for i in range(len(D)):
+        time_to_max_vel, accel_distance, time_at_max_vel = calculate_motion_segments(D[i], V[i], max_accel)
+
+        # Time to decelerate to a stop from max velocity
+        time_to_stop = abs(V[i]) / max_accel
+
+        # Total time for the wheel
+        total_time = time_to_max_vel + time_at_max_vel + time_to_stop
+
+        max_times.append(total_time)
+
+    # Maximum time across all wheels
+    return max(max_times)
+
 
 print(calculate_motion_segments(-8, 1, 1))
 print(calculate_total_time(-8, 1, 1))
 
 # Define parameters
 P_start = [0, 0]
-P_end = [8, 5]
-theta_degrees = 69
+P_end = [0, 8]
+theta_degrees = 0
 theta = theta_degrees * np.pi / 180
 L = 1.0
 V_max = 1.0
@@ -128,79 +199,10 @@ D = calculate_displacement(P_start, P_end, theta, L)
 # Calculate and Normalize Wheel Velocities
 V = calculate_wheel_velocities([P_end[0] - P_start[0], P_end[1] - P_start[1]], theta, L, V_max)
 
-times = [calculate_total_time(d, V[i], max_accel) for i, d in enumerate(D)]
-print("Individual Wheel Times:", times)
-max_time = max(times)
 
-# Find the maximum time required for any wheel to complete its movement
-max_time = max([calculate_total_time(d, V[i], max_accel) for i, d in enumerate(D)])
-
-# Plot combined trajectories of all wheels and the bar graph of displacements
-plot_combined(D, V, max_time, max_accel)
-
-# After calculating D
-print("Displacements:", D)
-
-# After calculating V
-print("Wheel Velocities:", V)
-
-# After calculating max_time
-print("Maximum Time Required:", max_time)
+max_time = calculate_max_time(D, V, max_accel)
+trajectories = calculate_trajectories(D, V, max_time, max_accel)
+plot_trajectories(D, trajectories)
 
 
 
-#
-# # Revised adjusted velocity and acceleration distance calculation
-# for i, wheel in enumerate(['FL', 'FR', 'BL', 'BR']):
-#     adjusted_velocity = V[i]  # Using the actual maximum velocity for each wheel
-#     time_to_max_vel, accel_distance, time_at_max_vel = calculate_motion_segments(D[i], adjusted_velocity,
-#                                                                                  max_accel)
-#
-#     # Debugging for each wheel
-#     # Generating time array for plotting
-#     t = np.linspace(0, max_time, 1000)
-#
-#     # Velocity calculation
-#     vel = np.where(t <= time_to_max_vel,
-#                    max_accel * t * np.sign(D[i]),
-#                    np.where(t <= time_to_max_vel + time_at_max_vel,
-#                             adjusted_velocity * np.sign(D[i]),
-#                             adjusted_velocity * np.sign(D[i]) - max_accel * (
-#                                         t - time_to_max_vel - time_at_max_vel) * np.sign(D[i])))
-#
-#     # Position calculation
-#     pos = np.where(
-#         t <= time_to_max_vel,
-#         0.5 * max_accel * t ** 2 * np.sign(D[i]),  # Acceleration phase
-#         np.where(
-#             t <= time_to_max_vel + time_at_max_vel,
-#             accel_distance * np.sign(D[i]) + adjusted_velocity * (t - time_to_max_vel) * np.sign(D[i]),
-#             # Constant velocity phase
-#             accel_distance * np.sign(D[i]) + adjusted_velocity * time_at_max_vel * np.sign(D[i]) + adjusted_velocity * (
-#                         t - time_to_max_vel - time_at_max_vel) * np.sign(D[i]) - 0.5 * max_accel * (
-#                         t - time_to_max_vel - time_at_max_vel) ** 2 * np.sign(D[i])  # Deceleration phase
-#         )
-#     )
-#
-#     # Rerun with revised position calculation
-#     t_accel_phase_end = np.where(t > time_to_max_vel)[0][0]
-#     pos_at_accel_phase_end = pos[t_accel_phase_end]
-#
-#     print(f"Wheel: {wheel}")
-#     print(f"Calculated Accel Distance: {accel_distance}")
-#     print(f"Position at End of Accel Phase on Plot: {pos_at_accel_phase_end}")
-#
-#     # Plotting for the wheel
-#     plt.figure(figsize=(8, 4))
-#     plt.plot(t, vel, label='Velocity')
-#     plt.plot(t, pos, label='Position')
-#     plt.axvline(time_to_max_vel, color='red', linestyle='--', label='End of Accel Phase')  # End of acceleration phase
-#     plt.title(f'{wheel} Wheel Trajectory')
-#     plt.xlabel('Time (s)')
-#     plt.ylabel('Position & Velocity')
-#     plt.axhline(0, color='black', linewidth=0.8)  # x-axis
-#
-#     plt.grid(True)  # Adding grid
-#
-#     plt.legend()
-#     plt.show()
