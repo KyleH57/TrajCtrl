@@ -181,12 +181,51 @@ def calculate_max_time(D, V, max_accel):
     return max(max_times)
 
 
-print(calculate_motion_segments(-8, 1, 1))
-print(calculate_total_time(-8, 1, 1))
+
+def find_index(time_array, time_point):
+    """Find the index in the time array where the given time should be inserted."""
+    return np.searchsorted(time_array, time_point)
+
+
+def interpolate(value_array, index, time_array, time_point):
+    """Interpolate to find the value at the given time point."""
+    if index == 0:
+        return value_array[0]
+    if index >= len(time_array):
+        return value_array[-1]
+    t0, t1 = time_array[index - 1], time_array[index]
+    v0, v1 = value_array[index - 1], value_array[index]
+    # Linear interpolation
+    return v0 + (v1 - v0) * (time_point - t0) / (t1 - t0)
+
+
+def get_pos_vel_at_time(trajectories, wheel, time_point):
+    """Get the position and velocity of a wheel at a given time point."""
+    if wheel not in trajectories:
+        raise ValueError("Wheel not found in trajectories")
+
+    wheel_data = trajectories[wheel]
+    t = wheel_data['time']
+    pos = wheel_data['position']
+    vel = wheel_data['velocity']
+
+    index = find_index(t, time_point)
+    pos_at_time = interpolate(pos, index, t, time_point)
+    vel_at_time = interpolate(vel, index, t, time_point)
+
+    return pos_at_time, vel_at_time
+
+
+# Example usage:
+# trajectories = calculate_trajectories(D, V, max_time, max_accel)
+# time_to_query = 2.5  # The time at which we want to find pos and vel
+# pos, vel = get_pos_vel_at_time(trajectories, 'FL', time_to_query)
+# print(f"Position at time {time_to_query} is {pos}, velocity is {vel}")
+
 
 # Define parameters
 P_start = [0, 0]
-P_end = [0, 8]
+P_end = [-8, 0]
 theta_degrees = 0
 theta = theta_degrees * np.pi / 180
 L = 1.0
@@ -202,6 +241,11 @@ V = calculate_wheel_velocities([P_end[0] - P_start[0], P_end[1] - P_start[1]], t
 
 max_time = calculate_max_time(D, V, max_accel)
 trajectories = calculate_trajectories(D, V, max_time, max_accel)
+
+time_to_query = 0.5  # The time at which we want to find pos and vel
+pos, vel = get_pos_vel_at_time(trajectories, 'RR', time_to_query)
+print(f"Position at time {time_to_query} is {pos}, velocity is {vel}")
+
 plot_trajectories(D, trajectories)
 
 
